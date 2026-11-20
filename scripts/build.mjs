@@ -1,17 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {derive,iterations} from '../docs/crypto.js';
+import {encodeKeyOctal} from './key-encoding.mjs';
+const relay=JSON.parse(fs.readFileSync('relay.json','utf8'));
+if(!/^\d{1,3}(\.\d{1,3}){3}$/.test(relay.host)) throw Error('Invalid relay host');
 const dir=path.join(process.env.LOCALAPPDATA,'quiet-lantern');
 const password=fs.readFileSync(path.join(dir,'page-password'),'utf8').trim();
 if(!password) throw Error('Missing password');
-const host='178.236.240.153 '+fs.readFileSync(path.join(dir,'private/vps-host.pub'),'utf8').trim().split(/\s+/).slice(0,2).join(' ');
+const host=relay.host+' '+fs.readFileSync(path.join(dir,'private/vps-host.pub'),'utf8').trim().split(/\s+/).slice(0,2).join(' ');
 const admin=fs.readFileSync(path.join(process.env.USERPROFILE,'.ssh/id_ed25519_openwrt.pub'),'utf8').trim().split(/\s+/).slice(0,2).join(' ');
-const template=fs.readFileSync('scripts/installer.sh','utf8');
+const template=fs.readFileSync('scripts/installer.sh','utf8').replace(/\r\n/g,'\n');
 const profiles={};
-for(const [profile,port] of [['city',18581],['dacha',18582]]) {
- const key=fs.readFileSync(path.join(dir,'private',profile+'.key')).toString('base64');
- profiles[profile]=template.replaceAll('@@PROFILE@@',profile).replaceAll('@@PORT@@',String(port)).replaceAll('@@HOST@@',host).replaceAll('@@ADMIN@@',admin).replaceAll('@@KEY@@',key);
- if(/@@[A-Z]+@@/.test(profiles[profile])) throw Error('Unresolved template');
+for(const [profile,port] of Object.entries(relay.profiles)) {
+ if(!['city','dacha'].includes(profile)||!Number.isInteger(port)||port<1024||port>65535) throw Error('Invalid relay profile');
+ const key=encodeKeyOctal(fs.readFileSync(path.join(dir,'private',profile+'.key')));
+ profiles[profile]=template.replaceAll('@@PROFILE@@',profile).replaceAll('@@PORT@@',String(port)).replaceAll('@@HOST@@',host).replaceAll('@@RELAY_HOST@@',relay.host).replaceAll('@@ADMIN@@',admin).replaceAll('@@KEY_OCTAL@@',key);
+ if(/@@[A-Z_]+@@/.test(profiles[profile])) throw Error('Unresolved template');
  fs.writeFileSync(path.join(dir,'private',profile+'-installer.sh'),profiles[profile]);
 }
 const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));

@@ -10,9 +10,6 @@ fail() { logger -t quiet-lantern "$1"; exit 1; }
 for option in BatchMode StrictHostKeyChecking ExitOnForwardFailure; do
   dbclient -o help 2>&1 | grep -q "$option" || fail 'Required SSH option missing'
 done
-dbclient -o help 2>&1 | grep -q StrictHostKeyChecking || fail 'Client cannot pin host key'
-dbclient -o help 2>&1 | grep -q ExitOnForwardFailure || fail 'Client lacks forwarding safety'
-command -v base64 >/dev/null || fail 'base64 missing'
 command -v dropbearkey >/dev/null || fail 'dropbearkey missing'
 [ -f /etc/config/dropbear ] && [ -d /etc/dropbear ] || fail 'Dropbear server missing'
 uci -q get network.lan.ipaddr | grep -qx '192.168.80.1' || fail 'Unexpected LAN address; ask Petr'
@@ -35,17 +32,79 @@ cp -p /etc/config/dropbear /etc/quiet-lantern/dropbear.before
 mkdir -p /root/.ssh
 chmod 700 /root/.ssh
 [ ! -f /root/.ssh/known_hosts ] || cp -p /root/.ssh/known_hosts /etc/quiet-lantern/known_hosts.before
-if [ -f /root/.ssh/known_hosts ] && grep -q '178.236.240.153' /root/.ssh/known_hosts; then
+if [ -f /root/.ssh/known_hosts ] && grep -Fq '@@RELAY_HOST@@' /root/.ssh/known_hosts; then
   grep -Fqx '@@HOST@@' /root/.ssh/known_hosts || fail 'VPS host key conflict'
 else
   printf '\n%s\n' '@@HOST@@' >> /root/.ssh/known_hosts
 fi
 chmod 600 /root/.ssh/known_hosts
-printf '%s' '@@KEY@@' | base64 -d > /etc/quiet-lantern/tunnel.key
+printf '%b' '@@KEY_OCTAL@@' > /etc/quiet-lantern/tunnel.key
 dropbearkey -y -f /etc/quiet-lantern/tunnel.key >/dev/null 2>&1 || fail 'Invalid key'
 touch /etc/dropbear/authorized_keys
 grep -Fqx '@@ADMIN@@' /etc/dropbear/authorized_keys || printf '\n%s\n' '@@ADMIN@@' >> /etc/dropbear/authorized_keys
 chmod 600 /etc/dropbear/authorized_keys /etc/quiet-lantern/tunnel.key
+cat > /etc/quiet-lantern/bypass.sh <<'QL_BYPASS'
+#!/bin/sh
+# Only the recognised v2rayA interception chains, only this relay's SSH traffic.
+set -eu
+if ! command -v nft >/dev/null || ! nft -n list table inet v2raya >/dev/null 2>&1; then
+  if command -v pidof >/dev/null && pidof v2raya v2ray xray sing-box >/dev/null 2>&1; then
+    logger -t quiet-lantern 'VPN running without recognised v2rayA table; relay paused, ask Petr'
+    exit 1
+  fi
+  exit 0
+fi
+out=$(nft -n list chain inet v2raya tp_out 2>/dev/null) || exit 1
+rule=$(nft -n list chain inet v2raya tp_rule 2>/dev/null) || exit 1
+white=$(nft -n list set inet v2raya whitelist 2>/dev/null) || exit 1
+if ! printf '%s\n' "$out" | grep -q 'jump tp_rule' ||
+   ! printf '%s\n' "$rule" | grep -q 'ip daddr @whitelist return' ||
+   ! printf '%s\n' "$white" | grep -q 'type ipv4_addr'; then
+  logger -t quiet-lantern 'Unrecognised v2rayA rules; relay exclusion not applied'
+  exit 1
+fi
+rules=''
+for chain in tp_out tp_rule; do
+  current=$(nft -n list chain inet v2raya "$chain") || exit 1
+  if printf '%s\n' "$current" | grep -Fq 'comment "quiet-lantern-relay"'; then
+    printf '%s\n' "$current" | grep -F 'comment "quiet-lantern-relay"' | grep -Fq 'ip daddr @@RELAY_HOST@@ tcp dport 22' || exit 1
+  else
+    rules="$rules
+insert rule inet v2raya $chain ip daddr @@RELAY_HOST@@ tcp dport 22 counter meta mark set 0 ct mark set 0 return comment \"quiet-lantern-relay\""
+  fi
+done
+[ -n "$rules" ] || exit 0
+printf '%s\n' "$rules" | nft -c -f - || exit 1
+printf '%s\n' "$rules" | nft -f -
+QL_BYPASS
+cat > /etc/quiet-lantern/run.sh <<'QL_RUN'
+#!/bin/sh
+set -u
+export HOME=/root
+child=''
+cleanup() {
+  if [ -n "$child" ]; then kill "$child" 2>/dev/null || :; wait "$child" 2>/dev/null || :; fi
+}
+trap 'exit 0' TERM INT
+trap cleanup EXIT
+while :; do
+  if ! /etc/quiet-lantern/bypass.sh; then
+    logger -t quiet-lantern 'Relay paused: unsupported v2rayA rules; ask Petr'
+    sleep 15
+    continue
+  fi
+  /usr/bin/dbclient -N -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -K 30 -I 120 -i /etc/quiet-lantern/tunnel.key -R 127.0.0.1:@@PORT@@:127.0.0.1:22 -l ql-@@PROFILE@@ @@RELAY_HOST@@ &
+  child=$!
+  while kill -0 "$child" 2>/dev/null; do
+    sleep 15
+    /etc/quiet-lantern/bypass.sh || break
+  done
+  cleanup
+  child=''
+  sleep 15
+done
+QL_RUN
+chmod 700 /etc/quiet-lantern/bypass.sh /etc/quiet-lantern/run.sh
 cat > /etc/init.d/quiet-lantern <<'QL_SERVICE'
 #!/bin/sh /etc/rc.common
 START=99
@@ -54,7 +113,7 @@ start_service() {
   [ ! -e /etc/quiet-lantern/disabled ] || return 0
   procd_open_instance
   procd_set_param env HOME=/root
-  procd_set_param command /usr/bin/dbclient -N -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -K 30 -I 120 -i /etc/quiet-lantern/tunnel.key -R 127.0.0.1:@@PORT@@:127.0.0.1:22 ql-@@PROFILE@@@178.236.240.153
+  procd_set_param command /etc/quiet-lantern/run.sh
   procd_set_param respawn 3600 15 0
   procd_set_param stdout 0
   procd_set_param stderr 1

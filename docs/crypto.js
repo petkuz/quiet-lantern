@@ -8,7 +8,16 @@ export async function unlock(password, box) {
   const key = await derive(password, bytes(box.salt), ['decrypt']);
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(box.iv)},key,bytes(box.data))));
 }
-export async function copyAndOpen(text, clipboard, navigate) {
-  await clipboard.writeText(text);
-  navigate('http://192.168.80.1/cgi-bin/luci/admin/system/startup');
+export const routerUrl='http://192.168.80.1/cgi-bin/luci/admin/system/startup';
+export async function copyAndOpen(text, clipboard, openWindow) {
+  // Both calls happen synchronously during the tap, before the first await.
+  const copying=clipboard.writeText(text);
+  let popup;
+  try { popup=openWindow('about:blank','_blank'); } catch { popup=null; }
+  if(popup) popup.opener=null;
+  try { await copying; }
+  catch(error) { if(popup) popup.close(); throw error; }
+  if(!popup) return false;
+  popup.location.replace(routerUrl);
+  return true;
 }

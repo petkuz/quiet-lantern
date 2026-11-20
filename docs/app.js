@@ -1,6 +1,7 @@
 import {unlock,copyAndOpen} from './crypto.js';
 const $ = id => document.getElementById(id);
 let profiles;
+const selectedProfile=()=>document.querySelector('input[name="profile"]:checked')?.value;
 $('unlock').addEventListener('submit', async event => {
   event.preventDefault(); $('enter').disabled=true; $('message').textContent='Открываем…';
   try {
@@ -11,11 +12,16 @@ $('unlock').addEventListener('submit', async event => {
   } catch { $('message').textContent='Не получилось открыть. Проверьте пароль и интернет.'; }
   finally { $('enter').disabled=false; }
 });
-$('profile').addEventListener('change',()=>{ $('copy').disabled=!$('profile').value; $('fallback').hidden=true; });
+$('profile').addEventListener('change',()=>{ $('copy').disabled=!selectedProfile(); $('fallback').hidden=true; });
 $('copy').addEventListener('click', async()=>{
-  const text=profiles[$('profile').value];
+  const text=profiles[selectedProfile()];
   if(!text) return;
-  try { await copyAndOpen(text,navigator.clipboard,url=>location.assign(url)); }
-  catch { $('manual').value=text; $('fallback').hidden=false; $('message').textContent='Safari не разрешил копирование. Нажмите на текст, выберите всё и скопируйте. Затем откройте роутер.'; }
+  $('fallback').hidden=true;
+  try {
+    const opened=await copyAndOpen(text,navigator.clipboard,(...args)=>window.open(...args));
+    if(!opened) { $('manualCopy').hidden=true; $('fallback').hidden=false; $('message').textContent='Текст скопирован. Нажмите «Открыть роутер» ниже.'; }
+    else $('message').textContent='Текст скопирован. Роутер открыт в новой вкладке.';
+  }
+  catch { $('manual').value=text; $('manualCopy').hidden=false; $('fallback').hidden=false; $('message').textContent='Не удалось скопировать. Нажмите на текст, выберите всё и скопируйте. Затем откройте роутер.'; }
 });
 $('manual').addEventListener('click',()=>{ $('manual').focus(); $('manual').select(); $('manual').setSelectionRange(0,$('manual').value.length); });

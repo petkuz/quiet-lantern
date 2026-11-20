@@ -3,6 +3,11 @@
 set -eu
 base=/root/quiet-lantern
 test ! -e "$base" || { echo 'Existing setup: inspect manually'; exit 1; }
+test ! -e /etc/ssh/sshd_config.d/60-quiet-lantern.conf || exit 1
+for profile in city dacha; do
+  ! getent passwd "ql-$profile" >/dev/null || exit 1
+done
+! ss -H -lnt | awk '{print $4}' | grep -Eq ':1858[12]$' || exit 1
 umask 077
 mkdir "$base"
 cp -a /etc/ssh/sshd_config "$base/sshd_config.before"
@@ -24,6 +29,7 @@ for profile in city dacha; do
   port=18581
   test "$profile" = city || port=18582
   pub=$(sed -n '/^ssh-ed25519 /p' "$profile.pub")
+  test -n "$pub"
   printf 'restrict,port-forwarding,permitlisten="127.0.0.1:%s",command="/bin/false" %s\n' "$port" "$pub" > /home/$user/.ssh/authorized_keys
   chown -R "$user:$user" /home/$user/.ssh
   chmod 600 /home/$user/.ssh/authorized_keys
