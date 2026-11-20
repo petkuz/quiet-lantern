@@ -2,6 +2,8 @@
 import hashlib
 import os
 import json
+import signal
+import time
 from pathlib import Path
 import subprocess
 import tempfile
@@ -30,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='ql-ash-') as directory:
         put('bin/' + name, '#!/bin/sh\n' + command + '\n')
     for name, text in {
         'etc/openwrt_release': 'test', 'sbin/procd': '',
-        'etc/rc.common': '#!/bin/sh\nexit 0\n', 'etc/init.d/dropbear': '',
+        'etc/rc.common': f'#!/bin/sh\necho "$*" >> {root}/service-actions\nexit 0\n', 'etc/init.d/dropbear': '',
         'etc/config/dropbear': 'existing config',
         'etc/rc.local': '# preserve this\nexit 0\n',
         'etc/passwd': f'root:x:0:0:root:{root}/root:/bin/sh\n',
@@ -46,6 +48,8 @@ with tempfile.TemporaryDirectory(prefix='ql-ash-') as directory:
         template = template.replace('@@' + name + '@@', value)
     assert '@@' not in template
     for old, new in [('/usr/bin/dbclient', str(bindir/'dbclient')),
+                     ('$(id -u)', '$(' + str(bindir/'id') + ' -u)'),
+                     ('logger -t quiet-lantern', str(bindir/'logger') + ' -t quiet-lantern'),
                      ('netstat -lnt', str(bindir/'netstat') + ' -lnt'),
                      ('/etc/', str(root/'etc')+'/'), ('/root', str(root/'root')),
                      ('/sbin/procd', str(root/'sbin/procd')),
@@ -65,6 +69,30 @@ with tempfile.TemporaryDirectory(prefix='ql-ash-') as directory:
     before = {p: hashlib.sha256(p.read_bytes()).digest() for p in root.rglob('*') if p.is_file()}
     assert run().returncode == 0
     assert before == {p: hashlib.sha256(p.read_bytes()).digest() for p in before}
+    protected = [root/'etc/quiet-lantern/tunnel.key', root/'etc/dropbear/authorized_keys', root/'root/.ssh/known_hosts', root/'etc/rc.local']
+    protected += list((root/'etc/quiet-lantern').glob('*.before'))
+    original = {p: p.read_bytes() for p in protected}
+    # Original v3 installs had no version marker. Upgrade only the three owned scripts.
+    (root/'etc/quiet-lantern/version').unlink()
+    put('etc/quiet-lantern/bypass.sh', '#!/bin/sh\n# old v3 bypass\nexit 1\n')
+    put('etc/quiet-lantern/run.sh', '#!/bin/sh\n# old v3 worker\nexit 1\n')
+    old_owned = {name: (root/name).read_bytes() for name in ['etc/quiet-lantern/bypass.sh', 'etc/quiet-lantern/run.sh', 'etc/init.d/quiet-lantern']}
+    assert run().returncode == 0
+    assert (root/'etc/quiet-lantern/version').read_text() == '4\n'
+    assert all(p.read_bytes() == data for p, data in original.items())
+    for name, data in old_owned.items():
+        backup = 'service' if name.endswith('init.d/quiet-lantern') else Path(name).name
+        assert (root/'etc/quiet-lantern/owned-before-v4'/backup).read_bytes() == data
+    assert [line.split()[-1] for line in (root/'service-actions').read_text().splitlines()][-2:] == ['stop', 'start']
+    snapshot = {p: p.read_bytes() for p in root.rglob('*') if p.is_file()}
+    assert run().returncode == 0
+    assert all(p.read_bytes() == data for p, data in snapshot.items())
+    (root/'etc/quiet-lantern/version').write_text('3\n')
+    put('etc/quiet-lantern/disabled', '')
+    snapshot = {p: p.read_bytes() for p in root.rglob('*') if p.is_file()}
+    assert run().returncode == 0
+    assert all(p.read_bytes() == data for p, data in snapshot.items())
+    (root/'etc/quiet-lantern/disabled').unlink()
     # Exercise the exact installed exclusion helper without touching host nftables.
     state = root/'nft-state.json'
     state.write_text(json.dumps({'mode': 'known', 'rules': [], 'writes': 0}))
@@ -105,12 +133,30 @@ else: sys.exit(1)
     assert apply_bypass().returncode == 0
     assert len(json.loads(state.read_text())['rules']) == 2
     state.write_text(json.dumps({'mode': 'unknown', 'rules': [], 'writes': 0}))
-    assert apply_bypass().returncode != 0
+    result = apply_bypass()
+    assert result.returncode == 0 and result.stdout.strip() == b'fallback'
     assert json.loads(state.read_text())['writes'] == 0
+    # The real ash worker must try SSH even with unknown rules, without changing them.
+    put('bin/dbclient', f'#!/bin/sh\nif [ "$1" = -o ] && [ "$2" = help ]; then echo BatchMode StrictHostKeyChecking ExitOnForwardFailure; exit 0; fi\necho attempt >> {root}/ssh-attempts\n/bin/sleep 60\n')
+    worker = root/'worker-test.sh'
+    worker.write_text((root/'etc/quiet-lantern/run.sh').read_text().replace('sleep 15', '/bin/sleep 0.03'))
+    process = subprocess.Popen(['busybox', 'ash', str(worker)], env=env, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):
+            if (root/'ssh-attempts').exists(): break
+            time.sleep(.02)
+        assert (root/'ssh-attempts').exists()
+        time.sleep(.15)
+        assert json.loads(state.read_text())['writes'] == 0
+        warning = 'No supported VPN exclusion; trying SSH over existing routing without changing VPN rules'
+        assert (root/'log').read_text().count(warning) == 1
+    finally:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=3)
     (root/'etc/quiet-lantern/installed').write_text('dacha\n')
     assert run().returncode != 0
     (root/'etc/quiet-lantern/installed').write_text('city\n')
     put('bin/netstat', '#!/bin/sh\nexit 0\n')
     assert run().returncode != 0
-print('Actual BusyBox ash: install, binary reconstruction, preserved config/keys, repeat no-op, profile mismatch and missing listener passed.')
-print('Exclusion fixture: only relay TCP/22 in both known chains, idempotence, recreation and unknown-table refusal passed.')
+print('Actual BusyBox ash: fresh install, v3 upgrade with preserved keys/backups, repeat no-op, disabled state, profile mismatch and missing listener passed.')
+print('Routing fixture: exact known-chain rules, recreation, unknown-table SSH attempt without mutation and bounded warning passed.')

@@ -6,7 +6,7 @@ const source=fs.readFileSync('docs/app.js','utf8');
 test('HTML, module imports and ciphertext fetch share a cache-busting release',()=>{
  const html=fs.readFileSync('docs/index.html','utf8');
  const urls=[html.match(/href="(style\.css[^\"]+)"/)[1],html.match(/src="(app\.js[^\"]+)"/)[1],source.match(/from '([^']+)'/)[1],source.match(/fetch\('([^']+)'/)[1]];
- assert.deepEqual(urls.map(url=>new URL(url,'https://example.test/').searchParams.get('v')),['3','3','3','3']);
+ assert.deepEqual(urls.map(url=>new URL(url,'https://example.test/').searchParams.get('v')),['4','4','4','4']);
 });
 
 function fixture(copy) {
