@@ -1,6 +1,6 @@
 # quiet-lantern
 
-Small Russian mobile helper published at https://petkuz.github.io/quiet-lantern/ using free GitHub Pages. No external browser dependencies, analytics, or router password collection.
+Small Russian mobile helper published at https://petkuz.github.io/quiet-lantern/index.html?v=3 using free GitHub Pages. No external browser dependencies, analytics, or router password collection. HTML, scripts, styles, and payload requests use release version 3 to avoid mixing previously cached files; increment the version together for future releases.
 
 `docs/` is the complete deployable artifact. `payload.json` contains authenticated ciphertext, never plaintext bootstrap credentials. The QR contains only the canonical HTTPS URL. Visiting or unlocking does not register a device or install anything.
 
