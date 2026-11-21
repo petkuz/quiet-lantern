@@ -1,18 +1,18 @@
-import {unlock,copyAndOpen,routerUrlForProfile} from './crypto.js?v=5';
+import {unlock,copyAndOpen,routerUrlForProfile} from './crypto.js?v=6';
 const $ = id => document.getElementById(id);
 let profiles;
 const selectedProfile=()=>document.querySelector('input[name="profile"]:checked')?.value;
 $('unlock').addEventListener('submit', async event => {
   event.preventDefault(); $('enter').disabled=true; $('message').textContent='Открываем…';
   try {
-    const response=await fetch('./payload.json?v=5',{cache:'no-store'});
+    const response=await fetch('./payload.json?v=6',{cache:'no-store'});
     if(!response.ok) throw Error();
     profiles=await unlock($('password').value,await response.json());
     $('password').value=''; $('unlock').hidden=true; $('steps').hidden=false; $('message').textContent='';
   } catch { $('message').textContent='Не получилось открыть. Проверьте пароль и интернет.'; }
   finally { $('enter').disabled=false; }
 });
-$('profile').addEventListener('change',()=>{ $('copy').disabled=!selectedProfile(); $('fallback').hidden=true; if(selectedProfile()) $('routerLink').href=routerUrlForProfile(selectedProfile()); });
+$('profile').addEventListener('change',()=>{ $('copy').disabled=!selectedProfile(); $('fallback').hidden=true; $('addressHelp').hidden=selectedProfile()!=='home'; if(selectedProfile()) $('routerLink').href=routerUrlForProfile(selectedProfile()); });
 $('copy').addEventListener('click', async()=>{
   const text=profiles[selectedProfile()];
   if(!text) return;

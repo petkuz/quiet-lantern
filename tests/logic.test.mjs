@@ -33,7 +33,7 @@ test('blocked popup returns copied status without navigating original tab',async
 
 test('each profile navigates only its reserved new tab after successful copying',async()=>{
  for(const profile of ['city','dacha','home']) {
-  const expected='http://'+(profile==='home'?'192.168.1.1':'192.168.80.1')+'/cgi-bin/luci/admin/system/startup';
+  const expected='http://192.168.80.1/cgi-bin/luci/admin/system/startup';
   let destination;
   assert.equal(routerUrlForProfile(profile),expected);
   const popup={opener:{},location:{replace:url=>{destination=url}},close(){}};

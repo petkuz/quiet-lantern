@@ -11,7 +11,7 @@ export async function unlock(password, box) {
 export const routerUrl='http://192.168.80.1/cgi-bin/luci/admin/system/startup';
 export function routerUrlForProfile(profile) {
   if(!['city','dacha','home'].includes(profile)) throw Error('Unknown profile');
-  return profile==='home' ? 'http://192.168.1.1/cgi-bin/luci/admin/system/startup' : routerUrl;
+  return routerUrl;
 }
 export async function copyAndOpen(text, clipboard, openWindow, targetUrl=routerUrl) {
   if(![routerUrl,routerUrlForProfile('home')].includes(targetUrl)) throw Error('Invalid router URL');

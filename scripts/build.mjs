@@ -14,7 +14,10 @@ const profiles={};
 for(const [profile,port] of Object.entries(relay.profiles)) {
  if(!['city','dacha','home'].includes(profile)||!Number.isInteger(port)||port<1024||port>65535||!/^192\.168\.\d+\.1$/.test(relay.lan[profile])) throw Error('Invalid relay profile');
  const key=encodeKeyOctal(fs.readFileSync(path.join(dir,'private',profile+'.key')));
- profiles[profile]=template.replaceAll('@@PROFILE@@',profile).replaceAll('@@PORT@@',String(port)).replaceAll('@@HOST@@',host).replaceAll('@@RELAY_HOST@@',relay.host).replaceAll('@@ADMIN@@',admin).replaceAll('@@KEY_OCTAL@@',key).replaceAll('@@LAN@@',relay.lan[profile]);
+ const fixedLanCheck="uci -q get network.lan.ipaddr | grep -qx '@@LAN@@' || fail 'Unexpected LAN address; ask Petr'";
+ if(!template.includes(fixedLanCheck)) throw Error('LAN template changed');
+ const profileTemplate=profile==='home'?template.replace(fixedLanCheck,fs.readFileSync('scripts/home-lan-check.sh','utf8').replace(/\r\n/g,'\n').trimEnd()):template;
+ profiles[profile]=profileTemplate.replaceAll('@@PROFILE@@',profile).replaceAll('@@PORT@@',String(port)).replaceAll('@@HOST@@',host).replaceAll('@@RELAY_HOST@@',relay.host).replaceAll('@@ADMIN@@',admin).replaceAll('@@KEY_OCTAL@@',key).replaceAll('@@LAN@@',relay.lan[profile]);
  if(/@@[A-Z_]+@@/.test(profiles[profile])) throw Error('Unresolved template');
  const baseline=path.join(dir,'private','compat-release4',profile+'-installer.sh');
  if(['city','dacha'].includes(profile)&&fs.existsSync(baseline)&&profiles[profile]!==fs.readFileSync(baseline,'utf8')) throw Error('Father compatibility changed');

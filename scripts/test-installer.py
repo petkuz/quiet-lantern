@@ -12,7 +12,11 @@ import tempfile
 source = Path('installer.sh').read_text()
 profile = sys.argv[1] if len(sys.argv) > 1 else 'city'
 assert profile in ['city', 'dacha', 'home']
-lan = '192.168.1.1' if profile == 'home' else '192.168.80.1'
+lan = sys.argv[2] if len(sys.argv)>2 else '192.168.80.1'
+if profile == 'home':
+    fixed = "uci -q get network.lan.ipaddr | grep -qx '@@LAN@@' || fail 'Unexpected LAN address; ask Petr'"
+    assert fixed in source
+    source = source.replace(fixed, Path('home-lan-check.sh').read_text().rstrip())
 port = {'city': '18581', 'dacha': '18582', 'home': '18584'}[profile]
 other = 'dacha' if profile != 'dacha' else 'city'
 assert 'base64' not in source
@@ -63,6 +67,15 @@ with tempfile.TemporaryDirectory(prefix='ql-ash-') as directory:
         template = template.replace(old, new)
     put('install.sh', template)
     env = dict(os.environ, PATH=str(bindir)+':/usr/bin:/bin')
+    if profile == 'home':
+        check = 'fail() { exit 1; }\n' + Path('home-lan-check.sh').read_text()
+        for candidate in ['192.168.80.1', '192.168.1.1', '10.42.7.1', '172.20.9.254/24']:
+            put('bin/uci', '#!/bin/sh\necho '+candidate+'\n')
+            assert subprocess.run(['busybox','ash','-c',check],env=env,capture_output=True).returncode == 0
+        for candidate in ['', 'not-an-ip', '999.1.1.1', '0.0.0.0', '127.0.0.1', '224.0.0.1', '10.2.3.4/99']:
+            put('bin/uci', '#!/bin/sh\necho '+candidate+'\n')
+            assert subprocess.run(['busybox','ash','-c',check],env=env,capture_output=True).returncode != 0
+        put('bin/uci', '#!/bin/sh\necho '+lan+'\n')
     def run():
         return subprocess.run(['busybox', 'ash', str(root/'install.sh')], env=env, capture_output=True)
     subprocess.run(['busybox', 'ash', '-n', str(root/'install.sh')], check=True)
