@@ -9,7 +9,7 @@ printf '%s %s\n' "$host" "$(cut -d ' ' -f 1,2 /etc/ssh/ssh_host_ed25519_key.pub)
 client="$PWD/tools/usr/bin/dbclient"
 for profile in city dacha; do
   port=18581; test "$profile" = city || port=18582
-  "$client" -N -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -K 30 -I 120 -i "$profile.key" -R 127.0.0.1:$port:127.0.0.1:22 -l ql-$profile "$host" >test-$profile.log 2>&1 &
+  "$client" -N -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -K 30 -i "$profile.key" -R 127.0.0.1:$port:127.0.0.1:22 -l ql-$profile "$host" >test-$profile.log 2>&1 &
   pid=$!
   sleep 2
   kill -0 "$pid"

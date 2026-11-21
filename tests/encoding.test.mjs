@@ -3,6 +3,23 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {encodeKeyOctal} from '../scripts/key-encoding.mjs';
+import {withoutLegacyIdleTimeout} from '../scripts/relay-compat.mjs';
+
+test('relay keeps 30-second keepalives without any idle-exit flag',()=>{
+ for(const file of ['scripts/installer.sh','scripts/test-vps.sh']) {
+  const source=fs.readFileSync(file,'utf8');
+  const commands=source.split('\n').filter(line=>line.includes(' -K 30 '));
+  assert.ok(commands.length>0);
+  for(const command of commands) {
+   assert.doesNotMatch(command,/(?:^|\s)-I(?:\s|\d)/);
+   assert.match(command,/(?:^|\s)-K 30(?:\s|$)/);
+   assert.match(command,/StrictHostKeyChecking=yes/);
+  }
+ }
+ const legacy='before\n  dbclient -K 30 -I 120 -i /etc/quiet-lantern/tunnel.key -R port\nafter\n';
+ assert.equal(withoutLegacyIdleTimeout(legacy),'before\n  dbclient -K 30 -i /etc/quiet-lantern/tunnel.key -R port\nafter\n');
+ assert.equal(withoutLegacyIdleTimeout('unrelated -I 120 text'),'unrelated -I 120 text');
+});
 
 test('all byte values encode as unambiguous POSIX octal escapes',()=>{
  const bytes=Buffer.from(Array.from({length:256},(_,i)=>i));

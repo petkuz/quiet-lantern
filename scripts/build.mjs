@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {derive,iterations} from '../docs/crypto.js';
 import {encodeKeyOctal} from './key-encoding.mjs';
+import {withoutLegacyIdleTimeout} from './relay-compat.mjs';
 const relay=JSON.parse(fs.readFileSync('relay.json','utf8'));
 if(!/^\d{1,3}(\.\d{1,3}){3}$/.test(relay.host)) throw Error('Invalid relay host');
 const dir=path.join(process.env.LOCALAPPDATA,'quiet-lantern');
@@ -20,7 +21,7 @@ for(const [profile,port] of Object.entries(relay.profiles)) {
  profiles[profile]=profileTemplate.replaceAll('@@PROFILE@@',profile).replaceAll('@@PORT@@',String(port)).replaceAll('@@HOST@@',host).replaceAll('@@RELAY_HOST@@',relay.host).replaceAll('@@ADMIN@@',admin).replaceAll('@@KEY_OCTAL@@',key).replaceAll('@@LAN@@',relay.lan[profile]);
  if(/@@[A-Z_]+@@/.test(profiles[profile])) throw Error('Unresolved template');
  const baseline=path.join(dir,'private','compat-release4',profile+'-installer.sh');
- if(['city','dacha'].includes(profile)&&fs.existsSync(baseline)&&profiles[profile]!==fs.readFileSync(baseline,'utf8')) throw Error('Father compatibility changed');
+ if(['city','dacha'].includes(profile)&&fs.existsSync(baseline)&&profiles[profile]!==withoutLegacyIdleTimeout(fs.readFileSync(baseline,'utf8'))) throw Error('Father compatibility changed beyond idle-timeout removal');
  fs.writeFileSync(path.join(dir,'private',profile+'-installer.sh'),profiles[profile]);
 }
 const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));

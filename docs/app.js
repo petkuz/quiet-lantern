@@ -1,11 +1,11 @@
-import {unlock,copyAndOpen,routerUrlForProfile} from './crypto.js?v=6';
+import {unlock,copyAndOpen,routerUrlForProfile} from './crypto.js?v=7';
 const $ = id => document.getElementById(id);
 let profiles;
 const selectedProfile=()=>document.querySelector('input[name="profile"]:checked')?.value;
 $('unlock').addEventListener('submit', async event => {
   event.preventDefault(); $('enter').disabled=true; $('message').textContent='Открываем…';
   try {
-    const response=await fetch('./payload.json?v=6',{cache:'no-store'});
+    const response=await fetch('./payload.json?v=7',{cache:'no-store'});
     if(!response.ok) throw Error();
     profiles=await unlock($('password').value,await response.json());
     $('password').value=''; $('unlock').hidden=true; $('steps').hidden=false; $('message').textContent='';

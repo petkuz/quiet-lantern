@@ -122,7 +122,7 @@ trap 'exit 0' TERM INT
 trap cleanup EXIT
 while :; do
   update_routing
-  /usr/bin/dbclient -N -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -K 30 -I 120 -i /etc/quiet-lantern/tunnel.key -R 127.0.0.1:@@PORT@@:127.0.0.1:22 -l ql-@@PROFILE@@ @@RELAY_HOST@@ &
+  /usr/bin/dbclient -N -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -K 30 -i /etc/quiet-lantern/tunnel.key -R 127.0.0.1:@@PORT@@:127.0.0.1:22 -l ql-@@PROFILE@@ @@RELAY_HOST@@ &
   child=$!
   while kill -0 "$child" 2>/dev/null; do
     sleep 15

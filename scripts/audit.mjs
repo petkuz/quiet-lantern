@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {unlock} from '../docs/crypto.js';
 import {encodeKeyOctal} from './key-encoding.mjs';
 import {createHash} from 'node:crypto';
+import {withoutLegacyIdleTimeout} from './relay-compat.mjs';
 const dir=path.join(process.env.LOCALAPPDATA,'quiet-lantern');
 const password=fs.readFileSync(path.join(dir,'page-password'),'utf8').trim();
 const box=JSON.parse(fs.readFileSync('docs/payload.json','utf8'));
@@ -18,9 +19,9 @@ if(fs.existsSync(baseline)) {
  const hashes=JSON.parse(fs.readFileSync(path.join(baseline,'hashes.json'),'utf8'));
  const legacy=await unlock(password,JSON.parse(fs.readFileSync(path.join(baseline,'payload.json'),'utf8')));
  for(const p of ['city','dacha']) {
-  if(profiles[p]!==legacy[p] || profiles[p]!==fs.readFileSync(path.join(baseline,p+'-installer.sh'),'utf8') || createHash('sha256').update(fs.readFileSync(path.join(dir,'private',p+'.key'))).digest('hex')!==hashes[p].keySHA256) throw Error('Father compatibility changed');
+  if(profiles[p]!==withoutLegacyIdleTimeout(legacy[p]) || profiles[p]!==withoutLegacyIdleTimeout(fs.readFileSync(path.join(baseline,p+'-installer.sh'),'utf8')) || createHash('sha256').update(fs.readFileSync(path.join(dir,'private',p+'.key'))).digest('hex')!==hashes[p].keySHA256) throw Error('Father compatibility changed beyond idle-timeout removal');
  }
- console.log('Father installer bytes and key identities match the protected release-4 baseline.');
+ console.log('Father keys unchanged; installer baseline differs only by the permitted idle-timeout removal.');
 }
 const secretStrings=[password,...keys.flatMap(key=>[key.toString('base64'),encodeKeyOctal(key)])];
 const history=execFileSync('git',['log','--all','-p','--no-ext-diff'],{encoding:'utf8',maxBuffer:4*1024*1024});
