@@ -19,7 +19,7 @@ for option in BatchMode StrictHostKeyChecking ExitOnForwardFailure; do
 done
 command -v dropbearkey >/dev/null || fail 'dropbearkey missing'
 [ -f /etc/config/dropbear ] && [ -d /etc/dropbear ] || fail 'Dropbear server missing'
-uci -q get network.lan.ipaddr | grep -qx '192.168.80.1' || fail 'Unexpected LAN address; ask Petr'
+uci -q get network.lan.ipaddr | grep -qx '@@LAN@@' || fail 'Unexpected LAN address; ask Petr'
 [ -x /etc/init.d/dropbear ] || fail 'SSH server missing'
 command -v netstat >/dev/null || fail 'Cannot verify SSH listener'
 netstat -lnt 2>/dev/null | awk '$4 == "127.0.0.1:22" || $4 == "0.0.0.0:22" { found=1 } END { exit !found }' || fail 'No IPv4 loopback SSH listener on port 22; ask Petr'

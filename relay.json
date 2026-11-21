@@ -1,5 +1,6 @@
 {
   "host": "176.124.198.201",
   "sshAlias": "aeza-go",
-  "profiles": { "city": 18581, "dacha": 18582 }
+  "profiles": { "city": 18581, "dacha": 18582, "home": 18584 },
+  "lan": { "city": "192.168.80.1", "dacha": "192.168.80.1", "home": "192.168.1.1" }
 }

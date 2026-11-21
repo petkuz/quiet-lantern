@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {derive,unlock,copyAndOpen,iterations} from '../docs/crypto.js';
+import {derive,unlock,copyAndOpen,iterations,routerUrlForProfile} from '../docs/crypto.js';
 test('authenticated encryption round trip; wrong password and tampering rejected',async()=>{
  const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
  const key=await derive('test-only',salt,['encrypt']);
@@ -29,4 +29,15 @@ test('blocked popup returns copied status without navigating original tab',async
  let copied=false;
  assert.equal(await copyAndOpen('script',{writeText:async()=>{copied=true}},()=>null),false);
  assert.equal(copied,true);
+});
+
+test('each profile navigates only its reserved new tab after successful copying',async()=>{
+ for(const profile of ['city','dacha','home']) {
+  const expected='http://'+(profile==='home'?'192.168.1.1':'192.168.80.1')+'/cgi-bin/luci/admin/system/startup';
+  let destination;
+  assert.equal(routerUrlForProfile(profile),expected);
+  const popup={opener:{},location:{replace:url=>{destination=url}},close(){}};
+  assert.equal(await copyAndOpen('test',{writeText:async()=>{}},()=>popup,routerUrlForProfile(profile)),true);
+  assert.equal(destination,expected);assert.equal(popup.opener,null);
+ }
 });

@@ -9,7 +9,12 @@ export async function unlock(password, box) {
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(box.iv)},key,bytes(box.data))));
 }
 export const routerUrl='http://192.168.80.1/cgi-bin/luci/admin/system/startup';
-export async function copyAndOpen(text, clipboard, openWindow) {
+export function routerUrlForProfile(profile) {
+  if(!['city','dacha','home'].includes(profile)) throw Error('Unknown profile');
+  return profile==='home' ? 'http://192.168.1.1/cgi-bin/luci/admin/system/startup' : routerUrl;
+}
+export async function copyAndOpen(text, clipboard, openWindow, targetUrl=routerUrl) {
+  if(![routerUrl,routerUrlForProfile('home')].includes(targetUrl)) throw Error('Invalid router URL');
   // Both calls happen synchronously during the tap, before the first await.
   const copying=clipboard.writeText(text);
   let popup;
@@ -18,6 +23,6 @@ export async function copyAndOpen(text, clipboard, openWindow) {
   try { await copying; }
   catch(error) { if(popup) popup.close(); throw error; }
   if(!popup) return false;
-  popup.location.replace(routerUrl);
+  popup.location.replace(targetUrl);
   return true;
 }

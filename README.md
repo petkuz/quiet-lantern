@@ -1,6 +1,10 @@
 # quiet-lantern
 
-Small Russian mobile helper published at https://petkuz.github.io/quiet-lantern/index.html?v=4 using free GitHub Pages. No external browser dependencies, analytics, or router password collection. HTML, scripts, styles, and payload requests use release version 4 to avoid mixing previously cached files; increment the version together for future releases.
+Small Russian mobile helper published at https://petkuz.github.io/quiet-lantern/index.html?v=5 using free GitHub Pages. No external browser dependencies, analytics, or router password collection. HTML, scripts, styles, and payload requests use release version 5 to avoid mixing previously cached files; increment the version together for future releases. The previous release-4 URL continues to support both father profiles.
+
+Locations: Город and Дача use LuCI at `192.168.80.1`; Домашний роутер uses `192.168.1.1`. Each has its own encrypted installer and dedicated relay identity. Home uses `ql-home`, loopback port 18584, and server-side ClientAliveInterval 30 / ClientAliveCountMax 3. Home provisioning changes neither father identity nor its settings. The existing home-router-remote management path is separate and remains unchanged. Adding a page choice never installs anything on a router.
+
+Release 5 preserves the city/dacha installer bytes and key identities against an outside-Git release-4 baseline; the installer version stays 4. The expected LAN is substituted per profile. A build/audit fails if the protected father installer bytes differ. `scripts/provision-home.sh` provisions only the new public home identity, with SSH configuration backups and protected-file hash checks. Private home key material is generated and retained locally; only its public key goes to the VPS.
 
 `docs/` is the complete deployable artifact. `payload.json` contains authenticated ciphertext, never plaintext bootstrap credentials. The QR contains only the canonical HTTPS URL. Visiting or unlocking does not register a device or install anything.
 

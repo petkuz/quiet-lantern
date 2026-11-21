@@ -4,11 +4,17 @@ import os
 import json
 import signal
 import time
+import sys
 from pathlib import Path
 import subprocess
 import tempfile
 
 source = Path('installer.sh').read_text()
+profile = sys.argv[1] if len(sys.argv) > 1 else 'city'
+assert profile in ['city', 'dacha', 'home']
+lan = '192.168.1.1' if profile == 'home' else '192.168.80.1'
+port = {'city': '18581', 'dacha': '18582', 'home': '18584'}[profile]
+other = 'dacha' if profile != 'dacha' else 'city'
 assert 'base64' not in source
 key = bytes(range(256))
 with tempfile.TemporaryDirectory(prefix='ql-ash-') as directory:
@@ -24,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix='ql-ash-') as directory:
         'id': 'echo 0',
         'logger': f'echo "$*" >> {root}/log',
         'dbclient': 'echo BatchMode StrictHostKeyChecking ExitOnForwardFailure',
-        'uci': 'echo 192.168.80.1',
+        'uci': 'echo ' + lan,
         'netstat': 'echo "tcp 0 0 127.0.0.1:22 0.0.0.0:* LISTEN"',
         'dropbearkey': 'exit 0',
     }
@@ -40,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='ql-ash-') as directory:
         'root/.ssh/known_hosts': 'existing host key\n',
     }.items():
         put(name, text)
-    substitutions = {'PROFILE': 'city', 'PORT': '18581', 'RELAY_HOST': '176.124.198.201',
+    substitutions = {'PROFILE': profile, 'PORT': port, 'LAN': lan, 'RELAY_HOST': '176.124.198.201',
                      'HOST': '176.124.198.201 ssh-ed25519 TEST', 'ADMIN': 'ssh-ed25519 ADMIN',
                      'KEY_OCTAL': ''.join('\\0%03o' % byte for byte in key)}
     template = source
@@ -153,9 +159,9 @@ else: sys.exit(1)
     finally:
         os.killpg(process.pid, signal.SIGTERM)
         process.wait(timeout=3)
-    (root/'etc/quiet-lantern/installed').write_text('dacha\n')
+    (root/'etc/quiet-lantern/installed').write_text(other+'\n')
     assert run().returncode != 0
-    (root/'etc/quiet-lantern/installed').write_text('city\n')
+    (root/'etc/quiet-lantern/installed').write_text(profile+'\n')
     put('bin/netstat', '#!/bin/sh\nexit 0\n')
     assert run().returncode != 0
 print('Actual BusyBox ash: fresh install, v3 upgrade with preserved keys/backups, repeat no-op, disabled state, profile mismatch and missing listener passed.')
